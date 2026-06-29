@@ -31,11 +31,17 @@ MAX_STEPS_PER_EPISODE = 200
 TOTAL_TRAINING_STEPS = 500_000
 SEEDS = [0, 1, 2, 3, 4]
 
-# Q-learning / SARSA
-ALPHA = 0.1
-EPSILON_START = 1.0
-EPSILON_END = 0.05
-EPSILON_DECAY_STEPS = 300_000
+# Q-learning
+Q_ALPHA = 0.02
+Q_EPSILON_START = 1.0
+Q_EPSILON_END = 0.05
+Q_EPSILON_DECAY_STEPS = 350_000
+
+# SARSA
+SARSA_ALPHA = 0.08
+SARSA_EPSILON_START = 1.0
+SARSA_EPSILON_END = 0.01
+SARSA_EPSILON_DECAY_STEPS = 350_000
 
 # REINFORCE
 POLICY_LR = 0.005
@@ -54,11 +60,19 @@ N_ACTIONS = 4   # left, down, right, up
 # ─────────────────────────────────────────────────────────────────────────────
 # Helper: epsilon schedule (linear decay)
 # ─────────────────────────────────────────────────────────────────────────────
-def get_epsilon(step: int) -> float:
-    """Linear decay from EPSILON_START to EPSILON_END over EPSILON_DECAY_STEPS."""
+def get_q_epsilon(step: int) -> float:
+    """Linear decay for Q-learning."""
     return max(
-        EPSILON_END,
-        EPSILON_START - step / EPSILON_DECAY_STEPS * (EPSILON_START - EPSILON_END),
+        Q_EPSILON_END,
+        Q_EPSILON_START - step / Q_EPSILON_DECAY_STEPS * (Q_EPSILON_START - Q_EPSILON_END),
+    )
+
+
+def get_sarsa_epsilon(step: int) -> float:
+    """Linear decay for SARSA."""
+    return max(
+        SARSA_EPSILON_END,
+        SARSA_EPSILON_START - step / SARSA_EPSILON_DECAY_STEPS * (SARSA_EPSILON_START - SARSA_EPSILON_END),
     )
 
 
@@ -167,7 +181,7 @@ def train_q_learning(seed: int) -> Tuple[List[int], List[float]]:
                 break
 
             # ── epsilon-greedy action selection ──
-            eps = get_epsilon(global_step)
+            eps = get_q_epsilon(global_step)
             if rng.rand() < eps:
                 action = rng.randint(N_ACTIONS)
             else:
@@ -178,7 +192,7 @@ def train_q_learning(seed: int) -> Tuple[List[int], List[float]]:
 
             # ── Q-learning update (off-policy) ──
             td_target = reward + GAMMA * np.max(Q[next_state]) * (1 - terminated)
-            Q[state, action] += ALPHA * (td_target - Q[state, action])
+            Q[state, action] += Q_ALPHA * (td_target - Q[state, action])
 
             state = next_state
             if terminated or truncated:
@@ -223,7 +237,7 @@ def train_sarsa(seed: int) -> Tuple[List[int], List[float]]:
     next_eval_at = 0
 
     def eps_greedy_action(state: int, step: int) -> int:
-        eps = get_epsilon(step)
+        eps = get_sarsa_epsilon(step)
         if rng.rand() < eps:
             return rng.randint(N_ACTIONS)
         return int(np.argmax(Q[state]))
@@ -252,7 +266,7 @@ def train_sarsa(seed: int) -> Tuple[List[int], List[float]]:
 
             # ── SARSA update (on-policy) ──
             td_target = reward + GAMMA * Q[next_state, next_action] * (1 - terminated)
-            Q[state, action] += ALPHA * (td_target - Q[state, action])
+            Q[state, action] += SARSA_ALPHA * (td_target - Q[state, action])
 
             state = next_state
             action = next_action
