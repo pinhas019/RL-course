@@ -1,0 +1,31 @@
+######################################################################
+# POMCP experiments — 2026-07-22 17:41:00
+# params: n_particles=500 gamma=0.95 ucb_c=1.0 max_depth=60 rollout_eps=0.2 max_steps=500 seed=0
+
+=== scenario=single  time_budget=1.0s  n_runs=30 ===
+  run  1/30: steps= 16  solved=True
+  run  2/30: steps= 14  solved=True
+  run  3/30: steps= 14  solved=True
+  run  4/30: steps= 14  solved=True
+  run  5/30: steps= 17  solved=True
+  run  6/30: steps= 16  solved=True
+  run  7/30: steps= 22  solved=True
+  run  8/30: steps= 15  solved=True
+  run  9/30: steps= 20  solved=True
+  run 10/30: steps= 14  solved=True
+  run 11/30: steps= 14  solved=True
+  run 12/30: steps= 14  solved=True
+  run 13/30: steps= 20  solved=True
+  run 14/30: steps= 17  solved=True
+  run 15/30: steps= 16  solved=True
+  run 16/30: steps= 18  solved=True
+  run 17/30: steps= 14  solved=True
+  run 18/30: steps= 14  solved=True
+  run 19/30: steps= 17  solved=True
+  run 20/30: steps= 16  solved=True
+  run 21/30: steps= 17  solved=True
+  run 22/30: steps= 14  solved=True
+  run 23/30: steps= 15  solved=True
+  run 24/30: steps= 15  solved=True
+  run 25/30: steps= 17  solved=True
+  run 26/30: steps= 18  solved=True
