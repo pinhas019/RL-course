@@ -163,12 +163,17 @@ above).
 ## Results
 
 Mean ± std of the number of environment steps to solve the task, over 30
-runs per cell (all runs solved the task; `results.txt` holds the raw logs).
+runs per cell (`results.txt` holds the raw per-run logs).
 
 | Scenario | Budget 1 s | Budget 20 s |
 |----------|-----------|-------------|
-| Single agent | RESULTS_SINGLE_1S | RESULTS_SINGLE_20S |
-| Two robots | RESULTS_MULTI_1S | RESULTS_MULTI_20S |
+| Single agent | 16.50 ± 2.91 (30/30 solved) | 16.43 ± 2.87 (30/30 solved) |
+| Two robots | 62.47 ± 81.77 (29/30 solved) | 31.97 ± 4.39 (30/30 solved) |
+
+Note on the two-robot 1 s cell: 29 of 30 runs solved the task (typical runs
+take 35–90 steps); a single run failed to complete the coordinated heavy-box
+push within the 500-step cap and was counted at 500 steps, which inflates
+the standard deviation — the median is ≈ 45 steps.
 
 ## Discussion
 
@@ -177,12 +182,21 @@ how many POMCP simulations back each decision (≈ thousands at 1 s, ≈ tens of
 thousands at 20 s). With more simulations, UCB1 statistics at the root are
 better converged, so the chosen actions waste fewer steps on detours,
 redundant rotations, and premature pushes made while the belief is still
-multimodal — the effect is visible mainly in the two-robot scenario, where
-the joint action space (9 actions per node) spreads the same simulation
-budget much thinner, and coordinated behaviors (the same-cell heavy push)
-need deep, consistent action sequences to show value. In the single-agent
-scenario the problem is easy enough that 1 s is already near the plateau,
-and 20 s mostly reduces variance rather than the mean.
+multimodal — the effect is dramatic in the two-robot scenario, where the
+joint action space (9 actions per node) spreads the same simulation budget
+much thinner, and coordinated behaviors (the same-cell heavy push) need
+deep, consistent action sequences to show value: going from 1 s to 20 s
+halves the mean (62.47 → 31.97 steps), collapses the standard deviation
+(81.77 → 4.39), and eliminates failures (29/30 → 30/30 solved) — at 20 s
+the coordinated heavy-box push is found reliably and quickly in every run,
+whereas at 1 s it is sometimes discovered only after long wandering (and
+once, not within the 500-step cap at all). In the single-agent
+scenario the problem is easy enough that 1 s (~2,000 simulations per
+decision) is already at the plateau: the measured results at 1 s
+(16.50 ± 2.91) and at 20 s (16.43 ± 2.87) are statistically identical —
+beyond the plateau, extra computation cannot help, because the remaining
+step count is dominated by the irreducible stochasticity of the transitions
+(failed pushes and sideways moves), not by decision quality.
 
 **Effect of the multi-robot scenario.** The two-robot scenario is harder on
 every axis: the belief is over *joint* positions (|free cells|² hypotheses
@@ -191,8 +205,10 @@ task itself contains the heavy box, which requires both robots to occupy the
 same cell and push in the same direction simultaneously — a low-probability
 event under exploration, and one that a 0.8-success push can still fail.
 Accordingly, the mean number of steps and its standard deviation are much
-larger than in the single-agent case; a large share of the extra steps is
-spent on the rendezvous + coordinated-push phase. The second robot does not
+larger than in the single-agent case — even with the generous 20 s budget,
+two robots need about twice the steps of the single agent (31.97 vs 16.43),
+with a large share of the extra steps spent on the rendezvous +
+coordinated-push phase. The second robot does not
 halve the solution time — the coordination overhead dominates the parallelism
 gain on this map. On the other hand, localization is not harder per robot:
 each robot's 3×3 observations localize it within a few steps exactly as in
