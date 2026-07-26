@@ -98,7 +98,7 @@ classDiagram
         _greedy_agent_action(state, i)
     }
     class _BeliefNode {
-        N, particles
+        N, expanded
         actions: list~_ActionNode~
     }
     class _ActionNode {

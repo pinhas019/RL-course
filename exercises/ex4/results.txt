@@ -158,3 +158,147 @@ SUMMARY
 scenario     budget   mean steps      std     solved
 ----------------------------------------------------
 multi           20s        31.97     4.39      30/30
+######################################################################
+# POMCP experiments — 2026-07-26 11:08:10
+# params: n_particles=500 gamma=0.95 ucb_c=1.0 max_depth=60 rollout_eps=0.2 max_steps=500 seed=0
+
+=== scenario=single  time_budget=1.0s  n_runs=30 ===
+  run  1/30: steps= 16  solved=True
+  run  2/30: steps= 14  solved=True
+  run  3/30: steps= 14  solved=True
+  run  4/30: steps= 14  solved=True
+  run  5/30: steps= 17  solved=True
+  run  6/30: steps= 16  solved=True
+  run  7/30: steps= 22  solved=True
+  run  8/30: steps= 15  solved=True
+  run  9/30: steps= 20  solved=True
+  run 10/30: steps= 14  solved=True
+  run 11/30: steps= 14  solved=True
+  run 12/30: steps= 14  solved=True
+  run 13/30: steps= 20  solved=True
+  run 14/30: steps= 17  solved=True
+  run 15/30: steps= 16  solved=True
+  run 16/30: steps= 18  solved=True
+  run 17/30: steps= 14  solved=True
+  run 18/30: steps= 14  solved=True
+  run 19/30: steps= 21  solved=True
+  run 20/30: steps= 16  solved=True
+  run 21/30: steps= 17  solved=True
+  run 22/30: steps= 14  solved=True
+  run 23/30: steps= 15  solved=True
+  run 24/30: steps= 15  solved=True
+  run 25/30: steps= 16  solved=True
+  run 26/30: steps= 18  solved=True
+  run 27/30: steps= 12  solved=True
+  run 28/30: steps= 26  solved=True
+  run 29/30: steps= 17  solved=True
+  run 30/30: steps= 20  solved=True
+  -> mean steps = 16.53   std = 2.99   solved 30/30   (wall time 502s)
+
+=== scenario=single  time_budget=20.0s  n_runs=30 ===
+  run  1/30: steps= 16  solved=True
+  run  2/30: steps= 14  solved=True
+  run  3/30: steps= 14  solved=True
+  run  4/30: steps= 14  solved=True
+  run  5/30: steps= 17  solved=True
+  run  6/30: steps= 16  solved=True
+  run  7/30: steps= 22  solved=True
+  run  8/30: steps= 15  solved=True
+  run  9/30: steps= 20  solved=True
+  run 10/30: steps= 14  solved=True
+  run 11/30: steps= 14  solved=True
+  run 12/30: steps= 14  solved=True
+  run 13/30: steps= 20  solved=True
+  run 14/30: steps= 17  solved=True
+  run 15/30: steps= 16  solved=True
+  run 16/30: steps= 18  solved=True
+  run 17/30: steps= 14  solved=True
+  run 18/30: steps= 14  solved=True
+  run 19/30: steps= 17  solved=True
+  run 20/30: steps= 16  solved=True
+  run 21/30: steps= 17  solved=True
+  run 22/30: steps= 14  solved=True
+  run 23/30: steps= 15  solved=True
+  run 24/30: steps= 15  solved=True
+  run 25/30: steps= 17  solved=True
+  run 26/30: steps= 18  solved=True
+  run 27/30: steps= 12  solved=True
+  run 28/30: steps= 26  solved=True
+  run 29/30: steps= 17  solved=True
+  run 30/30: steps= 20  solved=True
+  -> mean steps = 16.43   std = 2.87   solved 30/30   (wall time 9880s)
+
+=== scenario=multi  time_budget=1.0s  n_runs=30 ===
+  run  1/30: steps= 52  solved=True
+  run  2/30: steps= 33  solved=True
+  run  3/30: steps= 45  solved=True
+  run  4/30: steps= 34  solved=True
+  run  5/30: steps= 45  solved=True
+  run  6/30: steps= 36  solved=True
+  run  7/30: steps= 41  solved=True
+  run  8/30: steps= 47  solved=True
+  run  9/30: steps= 40  solved=True
+  run 10/30: steps= 47  solved=True
+  run 11/30: steps= 33  solved=True
+  run 12/30: steps= 33  solved=True
+  run 13/30: steps= 36  solved=True
+  run 14/30: steps= 41  solved=True
+  run 15/30: steps= 33  solved=True
+  run 16/30: steps= 47  solved=True
+  run 17/30: steps= 33  solved=True
+  run 18/30: steps= 38  solved=True
+  run 19/30: steps= 46  solved=True
+  run 20/30: steps= 32  solved=True
+  run 21/30: steps= 38  solved=True
+  run 22/30: steps= 40  solved=True
+  run 23/30: steps= 42  solved=True
+  run 24/30: steps= 44  solved=True
+  run 25/30: steps= 41  solved=True
+  run 26/30: steps= 37  solved=True
+  run 27/30: steps= 40  solved=True
+  run 28/30: steps= 42  solved=True
+  run 29/30: steps= 43  solved=True
+  run 30/30: steps= 53  solved=True
+  -> mean steps = 40.40   std = 5.69   solved 30/30   (wall time 1245s)
+
+=== scenario=multi  time_budget=20.0s  n_runs=30 ===
+  run  1/30: steps= 36  solved=True
+  run  2/30: steps= 34  solved=True
+  run  3/30: steps= 28  solved=True
+  run  4/30: steps= 28  solved=True
+  run  5/30: steps= 35  solved=True
+  run  6/30: steps= 29  solved=True
+  run  7/30: steps= 43  solved=True
+  run  8/30: steps= 38  solved=True
+  run  9/30: steps= 28  solved=True
+  run 10/30: steps= 43  solved=True
+  run 11/30: steps= 29  solved=True
+  run 12/30: steps= 27  solved=True
+  run 13/30: steps= 38  solved=True
+  run 14/30: steps= 37  solved=True
+  run 15/30: steps= 35  solved=True
+  run 16/30: steps= 31  solved=True
+  run 17/30: steps= 27  solved=True
+  run 18/30: steps= 27  solved=True
+  run 19/30: steps= 28  solved=True
+  run 20/30: steps= 32  solved=True
+  run 21/30: steps= 34  solved=True
+  run 22/30: steps= 37  solved=True
+  run 23/30: steps= 33  solved=True
+  run 24/30: steps= 34  solved=True
+  run 25/30: steps= 44  solved=True
+  run 26/30: steps= 26  solved=True
+  run 27/30: steps= 31  solved=True
+  run 28/30: steps= 30  solved=True
+  run 29/30: steps= 41  solved=True
+  run 30/30: steps= 37  solved=True
+  -> mean steps = 33.33   std = 5.19   solved 30/30   (wall time 20073s)
+
+======================================================================
+SUMMARY
+scenario     budget   mean steps      std     solved
+----------------------------------------------------
+single           1s        16.53     2.99      30/30
+single          20s        16.43     2.87      30/30
+multi            1s        40.40     5.69      30/30
+multi           20s        33.33     5.19      30/30

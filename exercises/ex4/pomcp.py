@@ -41,15 +41,12 @@ from observation import joint_observation
 
 class _BeliefNode:
     """A history (belief) node of the search tree."""
-    __slots__ = ("N", "expanded", "actions", "particles")
+    __slots__ = ("N", "expanded", "actions")
 
     def __init__(self, n_actions):
         self.N = 0
         self.expanded = False
         self.actions = [_ActionNode() for _ in range(n_actions)]
-        # Particle approximation of the belief at this history, filled by
-        # simulations that pass through the node (Silver & Veness, 2010).
-        self.particles = []
 
 
 class _ActionNode:
@@ -133,7 +130,6 @@ class POMCP:
             if child is None:
                 child = _BeliefNode(len(self.joint_actions))
                 anode.children[obs] = child
-            child.particles.append(positions)
             ret = reward + self.gamma * self._simulate(next_state, child, depth + 1)
 
         # Back up statistics along the path.
