@@ -1,6 +1,6 @@
 # Assignment 4 — Planning under Partial Observability: POMDP & POMCP
 
-**Students:** Pinhas Aburmad & Segev Olpak
+**Students:** Pinhas Aburmad 212146849 & Segev Olpak 325176188
 
 The Box Pushing problem of the previous assignments, with a new layer of
 uncertainty: the robot does **not** know its initial position on the board and
