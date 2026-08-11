@@ -13,6 +13,7 @@ scratch (no ready-made RL / planning / POMDP libraries).
 
 | File | Content |
 |------|---------|
+| [`EXERCISE_EXPLANATION.md`](EXERCISE_EXPLANATION.md) | Comprehensive step-by-step mathematical & in-code explanation guide + execution trace |
 | [`observation.py`](observation.py) | The observation function (Alternative B — egocentric 3×3 window) |
 | [`particle_filter.py`](particle_filter.py) | Particle filter for the belief state (rejection sampling + depletion handling) |
 | [`pomcp.py`](pomcp.py) | POMCP: MCTS over particles, UCB1, heuristic rollouts, enforced time budget |
