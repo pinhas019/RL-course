@@ -15,8 +15,9 @@ This document provides a step-by-step, file-by-file explanation of the Assignmen
    - [`run_experiments.py`](#run_experimentspy)
 4. [Execution Trace: One Full Iteration of the Loop](#4-execution-trace-one-full-iteration-of-the-loop)
 5. [Detailed MCTS Steps Walkthrough (In-Code)](#5-detailed-mcts-steps-walkthrough-in-code)
-6. [Step-by-Step Online Loop & Sequence Diagram](#6-step-by-step-online-loop--sequence-diagram)
-7. [Experimental Results & Discussion](#7-experimental-results--discussion)
+6. [Particle Filter & Belief Tracking Walkthrough](#6-particle-filter--belief-tracking-walkthrough)
+7. [Step-by-Step Online Loop & Sequence Diagram](#7-step-by-step-online-loop--sequence-diagram)
+8. [Experimental Results & Discussion](#8-experimental-results--discussion)
 
 ---
 
@@ -90,17 +91,94 @@ Because the state is partially observable, agents cannot plan directly on states
 
 Here is a step-by-step description of each source file implementing the solution:
 
-### [world_model.py] (file:///home/humanoid/RL-course/exercises/ex4/world_model.py)
-This file implements a lightweight, high-performance generative simulator `WorldModel` that duplicates the rules of the real `StochasticMultiAgentBoxPushEnv` environment.
-*   **`step(state, joint_action)`**: Takes a joint state `(positions, dirs, smalls, heavies)` and a joint action, simulates rotation, heavy-box pushing, small-box pushing, and stochastic moves (including deviation), and returns `(next_state, reward, done)`.
-*   **`dist_field(target)`**: Precomputes BFS distances from all grid cells to a target cell, ignoring boxes. This is cached and used by the rollout heuristic for pathfinding.
-*   **`passable(pos, smalls, heavies)`**: Utility to verify if a cell is free of walls and boxes.
+### [`world_model.py`](file:///home/humanoid/RL-course/exercises/ex4/world_model.py)
+The generative simulator `WorldModel` duplicates the rules of the real environment. It operates on the state tuple: `State = (positions, dirs, smalls, heavies)`.
 
-### [observation.py](file:///home/humanoid/RL-course/exercises/ex4/observation.py)
-This module handles the egocentric $3 \times 3$ observation window logic.
-*   **`observe(model, pos, smalls, heavies)`**: Computes the $3 \times 3$ window relative to the agent's true position.
-*   **`joint_observation(model, positions, smalls, heavies)`**: Returns a tuple of observations, one for each agent.
-*   **`consistent_cells(model, obs, smalls, heavies)`**: Checks all free cells on the grid and returns those whose egocentric $3 \times 3$ window matches `obs`. This serves as the inverse observation function used for belief reinvigoration.
+#### 1. Precomputing Pathfinding Fields (`dist_field`)
+To prevent the agent from wandering aimlessly during rollouts, we precompute BFS shortest paths from every cell to any target position (like goals or box cells):
+```python
+    def dist_field(self, target):
+        field = self._dist_cache.get(target)
+        if field is None:
+            field = {target: 0}
+            q = deque([target])
+            while q:
+                cx, cy = q.popleft()
+                for vx, vy in DIR_VEC:
+                    nxt = (cx + vx, cy + vy)
+                    if nxt not in self.walls and nxt not in field:
+                        field[nxt] = field[(cx, cy)] + 1
+                        q.append(nxt)
+            self._dist_cache[target] = field
+        return field
+```
+*   **Intention:** BFS pathfinding runs backward from the `target` to all reachable free cells on the grid, ignoring boxes.
+*   **Why it's memoized:** Running BFS on every rollout step is too slow. Caching the distance fields in `self._dist_cache` makes lookup instant (`O(1)`), which dramatically speeds up POMCP's rollouts.
+
+#### 2. Environment Transition Simulator (`step`)
+The core simulator transitions state $s$ to next state $s'$ under action $a$. It strictly mirrors the three-pass structure of the real environment to ensure simulation accuracy:
+*   **Pass 1: Rotations and Movement Intents (L122-133)**: Updates the headings of agents executing rotation (`LEFT`, `RIGHT`). For agents attempting to move `FORWARD`, it calculates their intended destination cell:
+    ```python
+    vec = DIR_VEC[dirs[i]]
+    fwd = (positions[i][0] + vec[0], positions[i][1] + vec[1])
+    intents[i] = (fwd, dirs[i])
+    ```
+*   **Pass 2: Heavy-Box Push Coordination (L134-156)**: Identifies if multiple agents are trying to push the same heavy box:
+    ```python
+    for i, (fwd, d) in intents.items():
+        if fwd in heavies:
+            pushes_by_box.setdefault(fwd, []).append(i)
+    ```
+    *   **Intention:** If $\ge 2$ agents push a heavy box from the *same* origin cell, in the *same* direction, and the cell behind the box is free, it rolls a $0.8$ probability for success. If successful, the heavy box slides forward, and the pushers move into the box's old position. The intents of these agents are then consumed so they are not evaluated as individual moves.
+*   **Pass 3: Individual Forwards (L157-183)**: Evaluates small-box pushes and individual movements:
+    *   **Small-Box Push**: If the forward cell contains a small box and the cell behind is passable, it rolls a $0.8$ probability to move both the agent and the box.
+    *   **Stochastic Agent Movement**: If moving into an empty cell, the move succeeds with $0.8$ probability. With $0.1$ probability, it deviates left; with $0.1$ probability, it deviates right:
+        ```python
+        r = rng.random()
+        side = (1.0 - self.move_success_prob) / 2.0  # 0.1
+        if r < self.move_success_prob:  # 0.8
+            actual_dir = intended_dir
+        elif r < self.move_success_prob + side:  # 0.9
+            actual_dir = (intended_dir - 1) % 4
+        else:
+            actual_dir = (intended_dir + 1) % 4
+        ```
+        If the resulting deviated cell is passable, the agent moves; otherwise, it remains in place.
+
+---
+
+### [`observation.py`](file:///home/humanoid/RL-course/exercises/ex4/observation.py)
+This module handles slicing local information out of the global map to simulate agent camera feeds.
+
+#### 1. Generating Egocentric Views (`observe`)
+Generates the deterministic egocentric $3 \times 3$ observation around the agent's current position:
+```python
+def observe(model, pos, smalls, heavies):
+    cells = []
+    for dx, dy in WINDOW_OFFSETS:
+        c = (pos[0] + dx, pos[1] + dy)
+        if (c[0] < 0 or c[0] >= model.width or c[1] < 0 or c[1] >= model.height
+                or c in model.walls):
+            cells.append('W')
+        elif c in smalls:
+            cells.append('B')
+        # ... check heavies, goals, free space
+    return tuple(cells)
+```
+*   **Intention:** Slices the map relative to `pos`. If a cell is out of bounds or a wall, it is labeled `'W'`. Boxes are checked against the dynamic `smalls` and `heavies` coordinates, goals are checked against the static layout, and empty cells are marked with `'.'`.
+*   **Egocentric Symmetries:** This $3 \times 3$ grid is independent of the agent's heading direction, giving equal weight to landmarks in all four directions.
+
+#### 2. Locating Matching Cells (`consistent_cells`)
+Inverts the observation function by scanning the map for matching camera views:
+```python
+def consistent_cells(model, obs, smalls, heavies):
+    return [
+        c for c in model.free_cells
+        if c not in smalls and c not in heavies
+        and observe(model, c, smalls, heavies) == obs
+    ]
+```
+*   **Intention:** Iterates over every free cell in the world model and generates the corresponding $3 \times 3$ observation window. If the window matches `obs`, the coordinate is a valid possibility. This is used to reinvigorate the particle filter during depletion.
 
 > [!NOTE]
 > **Why Alternative B (Egocentric) was selected over Alternative A (Fixed to North):**
@@ -108,33 +186,23 @@ This module handles the egocentric $3 \times 3$ observation window logic.
 > 2. **Boundary Definition**: Near boundaries (e.g., top walls), Alternative A slices outside the board, rendering it uninformative. The egocentric window is always well-defined.
 > 3. **Lateral Deviations**: Sideways deviations from stochastic moves are detected instantly, allowing the particle filter to adjust immediately.
 
-### [particle_filter.py](file:///home/humanoid/RL-course/exercises/ex4/particle_filter.py)
-This file tracks the belief state of the agent positions.
-*   **`init_uniform(smalls, heavies)`**: Uniformly distributes particles over all non-blocked cells at the start of an episode.
-*   **`update(action, real_obs, dirs_before, ...)`**: Executes rejection sampling:
-    1.  Pick a particle from the current set.
-    2.  Simulate the action using `WorldModel.step()`.
-    3.  Compare the simulated observation and box locations with the real observation and boxes.
-    4.  If they match, save the new particle.
-*   **`_reinvigorate(new_particles, real_obs, smalls, heavies)`**: If the sampling loop runs for $100 \times N$ iterations and still lacks particles (due to rejection/depletion), it uses `consistent_cells` to query all possible cells that match `real_obs` and fills the remainder of the particle filter.
+---
 
-### [pomcp.py](file:///home/humanoid/RL-course/exercises/ex4/pomcp.py)
-This contains the core POMCP planner.
-*   **`search(particles, dirs, smalls, heavies, time_budget)`**: The entry point. It repeatedly runs simulations from states sampled from the particle filter until `time_budget` is exceeded. It then returns the action that maximizes $Q(h, a)$ at the root.
-*   **`_simulate(state, node, depth)`**: Traverses the MCTS tree. If the node is unexpanded, it expands it and runs a rollout. Otherwise, it picks an action via `_ucb_select()`, transitions the state, and recursively calls `_simulate()`. Finally, it backs up the simulated value.
-*   **`_rollout(state, depth)`**: Simulates transitions using the rollout policy until `max_depth` or termination, accumulating discounted rewards.
-*   **`_rollout_policy(state)`**: $\epsilon$-greedy strategy. With probability $\epsilon=0.2$, it selects a random action; otherwise, it queries `_greedy_agent_action`.
-*   **`_greedy_agent_action(state, i)`**: A greedy heuristic. The agent identifies the closest box not yet on a goal, navigates to the staging cell behind it using the BFS distance map, rotates to face the box, and pushes it towards the nearest goal. If only a heavy box remains, both agents target the same staging cell, enabling cooperation.
+### [`particle_filter.py`](file:///home/humanoid/RL-course/exercises/ex4/particle_filter.py)
+This file houses the belief update system. Because partial observability limits coordinate access, the filter maintains a collection of 500 candidate states to approximate the belief state.
+*   *Please refer to [Section 6: Particle Filter & Belief Tracking Walkthrough](#6-particle-filter--belief-tracking-walkthrough) for a highly detailed, line-by-line explanation of this module.*
 
-### [run_experiments.py](file:///home/humanoid/RL-course/exercises/ex4/run_experiments.py)
-The main execution and evaluation harness.
-*   **`run_episode(ascii_map, time_budget, seed, args)`**: Runs the online interaction loop:
-    1.  Get current observations and box layout.
-    2.  Query `POMCP.search` (belief state is `pf.particles`).
-    3.  Execute joint action in the environment.
-    4.  Query sensor for new observations.
-    5.  Update the particle filter with `pf.update`.
-*   **`run_experiment(scenario, time_budget, args, out)`**: Runs 30 episodes for a given scenario (single agent or multi-agent) and time budget (1s or 20s), logging performance stats.
+---
+
+### [`pomcp.py`](file:///home/humanoid/RL-course/exercises/ex4/pomcp.py)
+This is the core online planner containing MCTS, selection policies, expanding nodes, backing up values, and BFS-guided heuristics.
+*   *Please refer to [Section 5: Detailed MCTS Steps Walkthrough (In-Code)](#5-detailed-mcts-steps-walkthrough-in-code) for a detailed code walkthrough of each part.*
+
+---
+
+### [`run_experiments.py`](file:///home/humanoid/RL-course/exercises/ex4/run_experiments.py)
+This harness ties the environment loop, belief filter updates, and planner search together.
+*   *Please refer to [Section 4: Execution Trace: One Full Iteration of the Loop](#4-execution-trace-one-full-iteration-of-the-loop) for the step-by-step trace of this runner.*
 
 ---
 
@@ -422,7 +490,114 @@ To guide rollouts effectively in a sparse-reward setting, POMCP uses an $\epsilo
 
 ---
 
-## 6. Step-by-Step Online Loop & Sequence Diagram
+## 6. Particle Filter & Belief Tracking Walkthrough
+
+This section provides a deep-dive walkthrough of the Particle Filter belief tracker implemented in [`particle_filter.py`](file:///home/humanoid/RL-course/exercises/ex4/particle_filter.py) and the observation constraints in [`observation.py`](file:///home/humanoid/RL-course/exercises/ex4/observation.py).
+
+### 1. The Motivation: Why Particle Filters for POMDPs?
+Under partial observability (POMDP), an agent cannot observe its exact state $s$. Instead, it must maintain a probability distribution over all possible states, called the **Belief State** $B(s)$.
+
+*   **Exact Belief Updates (Bayesian Filter):**
+    For a grid map, an exact belief update requires calculating:
+    $$B'(s') = \eta \cdot O(o \mid s', a) \sum_{s \in S} T(s' \mid s, a) B(s)$$
+    For large maps or multi-robot states, $S$ becomes extremely large. Summing over all states at every step is computationally prohibitive.
+*   **The Particle Filter Solution:**
+    Instead of maintaining a massive grid of exact probabilities, we represent the belief state using a collection of $N = 500$ sample states (particles). The density of particles in a region of the grid represents the probability that the agent is actually there. This makes belief updates extremely fast and scales well to high-dimensional state spaces.
+*   **The Particle Depletion Problem:**
+    In environments with deterministic observation functions (like our $3 \times 3$ egocentric camera), a simulated step from a candidate particle must match the real observation *exactly* to be accepted. If the agent makes a series of unexpected stochastic moves, all $N$ particles might end up in states that are mathematically inconsistent with the real observation, dropping our particle count to 0. We solve this using **Map-based Reinvigoration**.
+
+---
+
+### 2. Spreading the Particles (`init_uniform`)
+At the start of an episode, the agent has no idea where it is on the board. We must spread its initial guesses uniformly across all available free space.
+
+```python
+    def init_uniform(self, smalls, heavies):
+        free = [c for c in self.model.free_cells
+                if c not in smalls and c not in heavies]
+        self.particles = [
+            tuple(self.rng.choice(free) for _ in range(self.model.n_agents))
+            for _ in range(self.n_particles)
+        ]
+        return self.particles
+```
+*   **`free = [c for c in ...]`**: Compiles a list of all grid coordinates that are not walls and do not currently contain boxes.
+*   **`tuple(self.rng.choice(free) for _ in range(self.model.n_agents))`**: For each of the $N = 500$ particles, we sample a random joint coordinate (one cell per agent).
+*   **Why Joint Hypotheses?** In the two-robot scenario, we sample joint coordinates `((x0, y0), (x1, y1))` as a single particle. This is critical because the robots' positions are coupled when pushing a heavy box—both must be in the same cell. Tracking them independently would lose this coordination.
+
+---
+
+### 3. Rejection Sampling (`update`)
+After taking action $a$ and receiving observation $o$, we filter our particles to keep only those that are consistent with what we experienced.
+
+```python
+    def update(self, action, real_obs, dirs_before,
+               smalls_before, heavies_before, smalls_after, heavies_after):
+        model = self.model
+        new_particles = []
+        attempts = 0
+        max_attempts = self.max_attempts_factor * self.n_particles
+
+        while len(new_particles) < self.n_particles and attempts < max_attempts:
+            attempts += 1
+            positions = self.rng.choice(self.particles)
+            state = (positions, dirs_before, smalls_before, heavies_before)
+            (next_pos, _, sim_smalls, sim_heavies), _, _ = model.step(state, action)
+            if (sim_smalls == smalls_after and sim_heavies == heavies_after
+                    and joint_observation(model, next_pos,
+                                          sim_smalls, sim_heavies) == real_obs):
+                new_particles.append(next_pos)
+
+        if len(new_particles) < self.n_particles:
+            self._reinvigorate(new_particles, real_obs,
+                               smalls_after, heavies_after)
+
+        self.particles = new_particles
+        return self.particles
+```
+*   **`positions = self.rng.choice(self.particles)`**: Randomly selects a hypothesis state from our current belief set.
+*   **`model.step(state, action)`**: Simulates executing the real action $a$ starting from this hypothesis. This generates a simulated next position, reward, and box coordinates.
+*   **`if sim_smalls == smalls_after ...`**: Checks if the simulated transition results in the exact same box positions as observed in the real environment.
+*   **`and joint_observation(...) == real_obs`**: Checks if the simulated observation at the new position matches the real egocentric $3 \times 3$ window observations.
+*   **`new_particles.append(next_pos)`**: If both checks pass, the hypothesis is valid! We add it to our new belief set. We repeat this process until we have accumulated $N$ valid particles.
+
+---
+
+### 4. Handling Particle Depletion (`_reinvigorate` & `consistent_cells`)
+If we try `max_attempts` ($100 \times 500 = 50,000$ times) and still don't have $N$ valid particles, it means our belief filter has depleted. We must reinvigorate it.
+
+```python
+    def _reinvigorate(self, new_particles, real_obs, smalls, heavies):
+        per_agent_cells = []
+        for agent_obs in real_obs:
+            cells = consistent_cells(self.model, agent_obs, smalls, heavies)
+            if not cells:  # fallback safety
+                cells = [c for c in self.model.free_cells
+                         if c not in smalls and c not in heavies]
+            per_agent_cells.append(cells)
+
+        while len(new_particles) < self.n_particles:
+            new_particles.append(
+                tuple(self.rng.choice(cells) for cells in per_agent_cells)
+            )
+```
+*   **Inverting the Observation Function:**
+    Instead of simulating forward and hoping to hit the right observation by chance, we directly look at the map and find all coordinates that could possibly produce the real observation `agent_obs`.
+*   **`consistent_cells(...)`** ([`observation.py` L90-101](file:///home/humanoid/RL-course/exercises/ex4/observation.py#L90-L101)):
+    ```python
+    def consistent_cells(model, obs, smalls, heavies):
+        return [
+            c for c in model.free_cells
+            if c not in smalls and c not in heavies
+            and observe(model, c, smalls, heavies) == obs
+        ]
+    ```
+    This function scans every free cell on the board, slices a hypothetical $3 \times 3$ egocentric window around it, and checks if it matches the agent's real observation.
+*   **`new_particles.append(...)`**: Once we have the list of consistent cells for each agent, we fill the remaining slots in our particle filter by sampling joint positions uniformly from these lists. This guarantees the filter is replenished with physically valid, consistent state hypotheses.
+
+---
+
+## 7. Step-by-Step Online Loop & Sequence Diagram
 
 The interaction sequence during a single decision step is shown below:
 
@@ -470,7 +645,7 @@ sequenceDiagram
 
 ---
 
-## 7. Experimental Results & Discussion
+## 8. Experimental Results & Discussion
 
 The experiment logs (saved in [`results.txt`](file:///home/humanoid/RL-course/exercises/ex4/results.txt)) yielded the following average steps to solve the task (over 30 runs):
 
